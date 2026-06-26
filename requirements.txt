@@ -8,6 +8,13 @@ langchain
 langchain-community
 langchain-openai
 langchain-google-genai
+langgraph
 redis
 sqlalchemy
 psycopg[binary]
+asyncpg
+aiosqlite
+apscheduler
+edge-tts
+faiss-cpu
+

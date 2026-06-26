@@ -18,6 +18,10 @@ class Settings(BaseSettings):
     DATABASE_URL: Optional[str] = None
     REDIS_URL: Optional[str] = None
 
+    # SLA & Rate Limiting
+    RATE_LIMIT_PER_MINUTE: int = 60
+    SLA_TARGET_MS: int = 3000
+
     model_config = SettingsConfigDict(env_file=".env", env_file_encoding="utf-8", extra="ignore")
 
 settings = Settings()

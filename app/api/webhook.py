@@ -19,15 +19,46 @@ async def verify_webhook(
         return int(hub_challenge)
     raise HTTPException(status_code=403, detail="Verification failed")
 
-async def process_whatsapp_message(phone_number: str, text: str):
+from app.services.business_logic import human_mode_sessions
+from app.services.analytics import analytics_service
+from app.services.crm import crm_service
+import time
+
+async def process_whatsapp_message(phone_number: str, text: str, media_url: str = None, is_audio: bool = False):
     """Background task to process AI and send response."""
     print(f"Processing message from {phone_number}: {text}")
+    start_time = time.time()
     
-    # 1. Generate AI Response
-    ai_response = await ai_assistant.generate_response(text, phone_number)
+    # 1. Check if session is in human mode
+    if phone_number in human_mode_sessions:
+        print(f"[{phone_number}] is in HUMAN MODE. AI is ignoring the message.")
+        return
     
-    # 2. Send via WhatsApp
-    await whatsapp_service.send_text_message(phone_number, ai_response)
+    # 2. Update CRM — create/touch customer profile
+    await crm_service.get_or_create_customer(phone_number)
+    
+    # 3. Generate AI Response (passing media_url if present)
+    ai_response = await ai_assistant.generate_response(text, phone_number, media_url)
+    
+    response_time_ms = (time.time() - start_time) * 1000
+    
+    # 4. Log analytics event
+    message_type = "audio" if is_audio else ("image" if media_url else "text")
+    await analytics_service.log_event(
+        phone_number=phone_number,
+        message_type=message_type,
+        user_message=text,
+        ai_response=str(ai_response),
+        response_time_ms=response_time_ms,
+    )
+    
+    # 5. Send via WhatsApp (Text or Audio)
+    if is_audio:
+        from app.services.tts import generate_speech
+        audio_path = await generate_speech(ai_response)
+        await whatsapp_service.send_audio_message(phone_number, audio_path)
+    else:
+        await whatsapp_service.send_text_message(phone_number, ai_response)
 
 
 @router.post("/webhook")
@@ -48,12 +79,18 @@ async def receive_message(request: Request, background_tasks: BackgroundTasks):
                     if "messages" in value:
                         for message in value["messages"]:
                             phone_number = message.get("from")
-                            text = message.get("text", {}).get("body")
                             
-                            if text and phone_number:
-                                # Send to background task so webhook can return 200 OK immediately
+                            # Handle text messages
+                            if "text" in message:
+                                text = message["text"]["body"]
                                 background_tasks.add_task(process_whatsapp_message, phone_number, text)
-                            
+                                
+                            # Handle audio messages (voice notes)
+                            elif "audio" in message:
+                                # Mocking audio transcription for now. In reality, download and pass to Whisper/Gemini.
+                                audio_id = message["audio"]["id"]
+                                text = f"[Audio Message Received: {audio_id}]"
+                                background_tasks.add_task(process_whatsapp_message, phone_number, text, None, True)
         return {"status": "success"}
     except Exception as e:
         print(f"Error processing webhook: {e}")
