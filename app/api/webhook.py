@@ -1,9 +1,42 @@
+import hashlib
+import hmac
+import json
+from collections import OrderedDict
 from fastapi import APIRouter, Request, HTTPException, Query, BackgroundTasks
 from app.core.config import settings
 from app.services.ai import ai_assistant
 from app.services.whatsapp import whatsapp_service
 
 router = APIRouter()
+
+# Bounded set of recently-seen WhatsApp message IDs. WhatsApp retries webhook delivery
+# until it gets a 200, so without dedup the same message would be answered multiple times.
+_seen_message_ids: "OrderedDict[str, None]" = OrderedDict()
+_SEEN_MAX = 2000
+
+
+def _already_processed(message_id: str) -> bool:
+    """Return True if this message ID was seen before; otherwise record it (LRU-bounded)."""
+    if not message_id:
+        return False
+    if message_id in _seen_message_ids:
+        return True
+    _seen_message_ids[message_id] = None
+    if len(_seen_message_ids) > _SEEN_MAX:
+        _seen_message_ids.popitem(last=False)  # evict oldest
+    return False
+
+
+def _verify_signature(raw_body: bytes, signature_header: str | None) -> bool:
+    """Validate Meta's X-Hub-Signature-256 header. Skipped when no app secret is configured."""
+    if not settings.WHATSAPP_APP_SECRET:
+        return True  # local dev / secret not set
+    if not signature_header or not signature_header.startswith("sha256="):
+        return False
+    expected = hmac.new(
+        settings.WHATSAPP_APP_SECRET.encode(), raw_body, hashlib.sha256
+    ).hexdigest()
+    return hmac.compare_digest(expected, signature_header.split("=", 1)[1])
 
 @router.get("/webhook")
 async def verify_webhook(
@@ -19,7 +52,7 @@ async def verify_webhook(
         return int(hub_challenge)
     raise HTTPException(status_code=403, detail="Verification failed")
 
-from app.services.business_logic import human_mode_sessions
+from app.services.handoff import handoff_manager
 from app.services.analytics import analytics_service
 from app.services.crm import crm_service
 from app.services.tenant_manager import tenant_manager
@@ -32,7 +65,7 @@ async def process_whatsapp_message(phone_number: str, text: str, media_url: str 
     start_time = time.time()
 
     # 1. Check if session is in human mode
-    if phone_number in human_mode_sessions:
+    if handoff_manager.is_active(phone_number):
         print(f"[{phone_number}] is in HUMAN MODE. AI is ignoring the message.")
         return
 
@@ -62,7 +95,7 @@ async def process_whatsapp_message(phone_number: str, text: str, media_url: str 
         ai_response=str(ai_response),
         tool_called=", ".join(tools_used) if tools_used else None,
         response_time_ms=response_time_ms,
-        escalated=phone_number in human_mode_sessions,
+        escalated=handoff_manager.is_active(phone_number),
         tenant_id=tenant_id,
     )
     
@@ -81,21 +114,31 @@ async def receive_message(request: Request, background_tasks: BackgroundTasks):
     Receives incoming WhatsApp messages.
     """
     try:
-        body = await request.json()
+        # Read the raw body once so we can both verify the signature and parse it.
+        raw_body = await request.body()
+        if not _verify_signature(raw_body, request.headers.get("X-Hub-Signature-256")):
+            raise HTTPException(status_code=403, detail="Invalid signature")
+
+        body = json.loads(raw_body)
         print("Received payload:", body)
-        
+
         # Check if this is a WhatsApp status update or a message
         if body.get("object") == "whatsapp_business_account":
             for entry in body.get("entry", []):
                 for change in entry.get("changes", []):
                     value = change.get("value", {})
-                    
+
                     # The Phone Number ID identifies which business (tenant) received the message.
                     phone_number_id = value.get("metadata", {}).get("phone_number_id")
 
                     if "messages" in value:
                         for message in value["messages"]:
                             phone_number = message.get("from")
+
+                            # Skip messages we've already handled (WhatsApp retries on non-200).
+                            if _already_processed(message.get("id")):
+                                print(f"Duplicate message {message.get('id')} ignored.")
+                                continue
 
                             # Handle text messages
                             if "text" in message:
@@ -119,6 +162,8 @@ async def receive_message(request: Request, background_tasks: BackgroundTasks):
                                     process_whatsapp_message, phone_number, "", audio_id, True, phone_number_id
                                 )
         return {"status": "success"}
+    except HTTPException:
+        raise  # let auth failures (e.g. bad signature) return their real status code
     except Exception as e:
         print(f"Error processing webhook: {e}")
         return {"status": "error"}

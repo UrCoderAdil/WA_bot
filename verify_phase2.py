@@ -8,14 +8,14 @@ sys.stdout.reconfigure(encoding='utf-8')
 load_dotenv()
 
 from app.services.ai import ai_assistant
-from app.services.business_logic import human_mode_sessions
+from app.services.handoff import handoff_manager
 
 async def run_tests():
     phone = "923002222222"
     
     print("\n--- Test 1: Multimodal (Image) ---")
     # A sample public image URL (a simple placeholder image)
-    image_url = "https://upload.wikimedia.org/wikipedia/commons/thumb/a/a7/React-icon.svg/200px-React-icon.svg.png"
+    image_url = "https://www.python.org/static/community_logos/python-logo-master-v3-TM.png"
     res1 = await ai_assistant.generate_response("What logo is this in the image?", phone, media_url=image_url)
     print("Bot:", res1)
     
@@ -30,11 +30,11 @@ async def run_tests():
     print("\n--- Test 4: Human Handoff ---")
     res4 = await ai_assistant.generate_response("I am very angry! I want to talk to a real human right now!", phone)
     print("Bot:", res4)
-    print(f"Is session in human mode? {phone in human_mode_sessions}")
-    
+    print(f"Is session in human mode? {handoff_manager.is_active(phone)}")
+
     print("\n--- Test 5: Post-Handoff Check ---")
     # Simulating the webhook logic
-    if phone in human_mode_sessions:
+    if handoff_manager.is_active(phone):
         print(f"[{phone}] is in HUMAN MODE. AI is ignoring the message.")
     else:
         res5 = await ai_assistant.generate_response("Hello?", phone)

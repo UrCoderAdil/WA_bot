@@ -3,6 +3,7 @@ from pydantic import BaseModel
 from typing import Optional
 from app.services.tenant_manager import tenant_manager
 from app.services.knowledge_base import kb_service
+from app.services.handoff import handoff_manager
 
 router = APIRouter(prefix="/admin", tags=["Admin"])
 
@@ -78,3 +79,20 @@ async def delete_knowledge(entry_id: str):
     if not deleted:
         raise HTTPException(status_code=404, detail="Entry not found")
     return {"status": "deleted"}
+
+
+# --- Human handoff endpoints ---
+
+@router.get("/handoffs")
+async def list_handoffs():
+    """List conversations currently owned by a human agent (AI paused)."""
+    return {"handoffs": handoff_manager.list_active()}
+
+
+@router.post("/handoffs/{phone_number}/release")
+async def release_handoff(phone_number: str):
+    """Hand a conversation back to the AI so it resumes replying."""
+    released = handoff_manager.release(phone_number)
+    if not released:
+        raise HTTPException(status_code=404, detail="No active human session for this number")
+    return {"status": "released", "phone_number": phone_number}

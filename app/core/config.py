@@ -9,6 +9,9 @@ class Settings(BaseSettings):
     WHATSAPP_VERIFY_TOKEN: str = "your_verify_token_here"
     WHATSAPP_ACCESS_TOKEN: str = ""
     WHATSAPP_PHONE_NUMBER_ID: str = ""
+    # App Secret (from Meta App dashboard). When set, incoming webhooks are verified
+    # via the X-Hub-Signature-256 header. Leave empty to skip verification in local dev.
+    WHATSAPP_APP_SECRET: str = ""
     
     # AI Config
     OPENAI_API_KEY: Optional[str] = None
@@ -16,6 +19,8 @@ class Settings(BaseSettings):
     # Model is configurable via .env. gemini-2.5-flash has a far more generous free-tier
     # quota than gemini-3.5-flash (which is capped at ~20 requests/day on the free tier).
     GEMINI_MODEL: str = "gemini-2.5-flash"
+    # Embedding model for the knowledge base (RAG). embedding-001 is retired.
+    GEMINI_EMBED_MODEL: str = "models/gemini-embedding-001"
     
     # DB Config
     DATABASE_URL: Optional[str] = None

@@ -85,15 +85,35 @@ def lookup_customer(phone_number: str) -> str:
     Look up a customer's profile by their phone number.
     Returns their name, order history, preferences, and tags.
     """
-    import asyncio
+    from app.core.utils import run_coro_sync
     try:
-        loop = asyncio.get_event_loop()
-        if loop.is_running():
-            import concurrent.futures
-            with concurrent.futures.ThreadPoolExecutor() as pool:
-                result = pool.submit(asyncio.run, crm_service.get_or_create_customer(phone_number)).result()
-        else:
-            result = asyncio.run(crm_service.get_or_create_customer(phone_number))
+        result = run_coro_sync(crm_service.get_or_create_customer(phone_number))
         return str(result)
     except Exception as e:
         return f"Could not look up customer: {e}"
+
+
+@tool
+def update_customer_profile(phone_number: str, name: str = None,
+                            preferred_language: str = None, notes: str = None) -> str:
+    """
+    Save what you learn about a customer so it's remembered in future conversations.
+    Use this when the customer tells you their name, their preferred language
+    (en / ur / roman_urdu), or a preference worth remembering (e.g. allergies,
+    favorite order). Only pass the fields you actually learned.
+    """
+    from app.core.utils import run_coro_sync
+    fields = {k: v for k, v in {
+        "name": name,
+        "preferred_language": preferred_language,
+        "notes": notes,
+    }.items() if v is not None}
+    if not fields:
+        return "Nothing to update."
+    try:
+        result = run_coro_sync(crm_service.update_customer(phone_number, **fields))
+        if result is None:
+            return "Customer not found."
+        return f"Saved profile updates: {', '.join(fields.keys())}."
+    except Exception as e:
+        return f"Could not update customer: {e}"

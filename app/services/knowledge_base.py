@@ -7,6 +7,24 @@ from langchain_core.tools import tool
 class KnowledgeBaseService:
     """Simple knowledge base for business-specific information (RAG-lite)."""
 
+    def __init__(self):
+        # A single embeddings client, created lazily and reused.
+        self._embeddings = None
+        # Cached FAISS indexes per scope: key -> (version, vectorstore).
+        self._index_cache: dict = {}
+        # Bumped on every add/delete so cached indexes rebuild only when data changes.
+        self._version = 0
+
+    def _get_embeddings(self):
+        if self._embeddings is None:
+            from langchain_google_genai import GoogleGenerativeAIEmbeddings
+            from app.core.config import settings
+            self._embeddings = GoogleGenerativeAIEmbeddings(
+                model=settings.GEMINI_EMBED_MODEL,
+                google_api_key=settings.GEMINI_API_KEY,
+            )
+        return self._embeddings
+
     async def add_entry(self, title: str, content: str, category: str = None,
                         tenant_id: str = None) -> dict:
         """Add a knowledge entry."""
@@ -20,37 +38,40 @@ class KnowledgeBaseService:
             session.add(entry)
             await session.commit()
             await session.refresh(entry)
+            self._version += 1  # invalidate cached indexes
             return self._to_dict(entry)
 
-    async def search(self, query: str, tenant_id: str = None) -> list[dict]:
-        """Search knowledge entries using semantic vector search (FAISS)."""
+    async def _get_index(self, tenant_id: str = None):
+        """Return a FAISS index for the given scope, rebuilding only when data changed."""
+        key = tenant_id or "__all__"
+        cached = self._index_cache.get(key)
+        if cached and cached[0] == self._version:
+            return cached[1]  # reuse — no DB read, no re-embedding of entries
+
         async with async_session() as session:
             stmt = select(KnowledgeEntry)
             if tenant_id:
                 stmt = stmt.where(KnowledgeEntry.tenant_id == tenant_id)
-            result = await session.execute(stmt)
-            entries = result.scalars().all()
+            entries = (await session.execute(stmt)).scalars().all()
 
-            if not entries:
-                return []
+        if not entries:
+            self._index_cache[key] = (self._version, None)
+            return None
 
-            from langchain_community.vectorstores import FAISS
-            from langchain_google_genai import GoogleGenerativeAIEmbeddings
-            from app.core.config import settings
-            
-            embeddings = GoogleGenerativeAIEmbeddings(
-                model="models/embedding-001", 
-                google_api_key=settings.GEMINI_API_KEY
-            )
-            
-            # Create FAISS index on the fly (acts as an intelligent semantic cache)
-            texts = [f"{e.title}: {e.content}" for e in entries]
-            metadatas = [self._to_dict(e) for e in entries]
-            
-            vectorstore = await FAISS.afrom_texts(texts, embeddings, metadatas=metadatas)
-            docs = await vectorstore.asimilarity_search(query, k=3)
-            
-            return [doc.metadata for doc in docs]
+        from langchain_community.vectorstores import FAISS
+        texts = [f"{e.title}: {e.content}" for e in entries]
+        metadatas = [self._to_dict(e) for e in entries]
+        vectorstore = await FAISS.afrom_texts(texts, self._get_embeddings(), metadatas=metadatas)
+        self._index_cache[key] = (self._version, vectorstore)
+        return vectorstore
+
+    async def search(self, query: str, tenant_id: str = None) -> list[dict]:
+        """Search knowledge entries using semantic vector search (cached FAISS index)."""
+        vectorstore = await self._get_index(tenant_id)
+        if vectorstore is None:
+            return []
+        docs = await vectorstore.asimilarity_search(query, k=3)
+        return [doc.metadata for doc in docs]
 
     async def get_all(self, tenant_id: str = None) -> list[dict]:
         """List all knowledge entries."""
@@ -72,6 +93,7 @@ class KnowledgeBaseService:
             if entry:
                 await session.delete(entry)
                 await session.commit()
+                self._version += 1  # invalidate cached indexes
                 return True
             return False
 
@@ -95,16 +117,9 @@ def search_knowledge_base(query: str) -> str:
     Search the business knowledge base for information about products, policies,
     menu items, FAQs, or any other business-specific data.
     """
-    import asyncio
+    from app.core.utils import run_coro_sync
     try:
-        loop = asyncio.get_event_loop()
-        if loop.is_running():
-            import concurrent.futures
-            with concurrent.futures.ThreadPoolExecutor() as pool:
-                results = pool.submit(asyncio.run, kb_service.search(query)).result()
-        else:
-            results = asyncio.run(kb_service.search(query))
-
+        results = run_coro_sync(kb_service.search(query))
         if not results:
             return "No relevant knowledge found for this query."
         return "\n".join([f"- {r['title']}: {r['content']}" for r in results])

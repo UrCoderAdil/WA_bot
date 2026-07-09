@@ -1,8 +1,8 @@
 from langchain_core.tools import tool
-import random
 
 import asyncio
 from app.integrations.sandbox import SandboxOMS, SandboxPaymentGateway
+from app.services.handoff import handoff_manager
 
 # Instantiate adapters
 oms_adapter = SandboxOMS()
@@ -32,18 +32,14 @@ def book_appointment(name: str, phone_number: str, date: str, time: str) -> str:
     
     return f"Appointment successfully booked for {name} on {date} at {time}. We have scheduled a reminder."
 
-# Global set to track which sessions (phone numbers) have been escalated to a human.
-# In a real app, this would be in Redis or a Database.
-human_mode_sessions = set()
-
 @tool
 def escalate_to_human(phone_number: str, reason: str) -> str:
     """
-    Escalate the conversation to a human agent. Use this if the user is angry, 
+    Escalate the conversation to a human agent. Use this if the user is angry,
     requests a human, or has a complex issue the AI cannot solve.
     """
-    print(f"\n[🚨 HUMAN HANDOFF TRIGGERED 🚨] Phone: {phone_number} | Reason: {reason}\n")
-    human_mode_sessions.add(phone_number)
+    print(f"\n[HUMAN HANDOFF TRIGGERED] Phone: {phone_number} | Reason: {reason}\n")
+    handoff_manager.escalate(phone_number, reason)
     return "Successfully escalated. The human agent will take over shortly. Tell the user a human agent is joining."
 
 @tool
@@ -70,7 +66,7 @@ def get_upsell_recommendations(current_item: str) -> str:
 # Import tools defined in other service modules so they get bound to the agent.
 # (These were previously defined with @tool but never wired into the agent.)
 from app.services.knowledge_base import search_knowledge_base
-from app.services.crm import lookup_customer
+from app.services.crm import lookup_customer, update_customer_profile
 
 # List of tools to bind to the LLM
 business_tools = [
@@ -81,4 +77,5 @@ business_tools = [
     get_upsell_recommendations,
     search_knowledge_base,
     lookup_customer,
+    update_customer_profile,
 ]
