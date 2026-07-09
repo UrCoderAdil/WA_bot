@@ -1,7 +1,7 @@
-from datetime import datetime
 from sqlalchemy import select, func
 from app.models.customer import Customer
 from app.db.database import async_session
+from app.core.utils import utcnow
 from langchain_core.tools import tool
 
 
@@ -38,7 +38,7 @@ class CRMService:
                 for key, value in kwargs.items():
                     if hasattr(customer, key):
                         setattr(customer, key, value)
-                customer.last_interaction = datetime.utcnow()
+                customer.last_interaction = utcnow()
                 await session.commit()
                 await session.refresh(customer)
                 return self._to_dict(customer)

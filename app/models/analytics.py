@@ -1,7 +1,7 @@
 import uuid
-from datetime import datetime
 from sqlalchemy import Column, String, Integer, Float, DateTime, Boolean
 from app.db.database import Base
+from app.core.utils import utcnow
 
 
 class AnalyticsEvent(Base):
@@ -16,7 +16,7 @@ class AnalyticsEvent(Base):
     tool_called = Column(String(100), nullable=True)  # e.g., "check_order_status"
     response_time_ms = Column(Float, nullable=True)
     escalated = Column(Boolean, default=False)
-    created_at = Column(DateTime, default=datetime.utcnow, index=True)
+    created_at = Column(DateTime, default=utcnow, index=True)
 
     def __repr__(self):
         return f"<AnalyticsEvent {self.message_type} from {self.phone_number}>"

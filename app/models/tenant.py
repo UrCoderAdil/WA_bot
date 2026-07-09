@@ -1,8 +1,7 @@
 import uuid
-from datetime import datetime
 from sqlalchemy import Column, String, Boolean, DateTime, JSON, Text
-from sqlalchemy.dialects.postgresql import UUID as PG_UUID
 from app.db.database import Base
+from app.core.utils import utcnow
 
 
 class Tenant(Base):
@@ -16,8 +15,8 @@ class Tenant(Base):
     tools_enabled = Column(JSON, default=list)  # List of tool names enabled
     api_keys = Column(JSON, default=dict)  # Tenant-specific API keys
     is_active = Column(Boolean, default=True)
-    created_at = Column(DateTime, default=datetime.utcnow)
-    updated_at = Column(DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
+    created_at = Column(DateTime, default=utcnow)
+    updated_at = Column(DateTime, default=utcnow, onupdate=utcnow)
 
     def __repr__(self):
         return f"<Tenant {self.name} ({self.business_type})>"

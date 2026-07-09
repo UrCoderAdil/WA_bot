@@ -67,11 +67,18 @@ def get_upsell_recommendations(current_item: str) -> str:
         return "Recommend adding Garlic Bread and a 1-liter Pepsi."
     return "Recommend adding a dessert like Chocolate Lava Cake."
 
+# Import tools defined in other service modules so they get bound to the agent.
+# (These were previously defined with @tool but never wired into the agent.)
+from app.services.knowledge_base import search_knowledge_base
+from app.services.crm import lookup_customer
+
 # List of tools to bind to the LLM
 business_tools = [
-    check_order_status, 
-    book_appointment, 
-    escalate_to_human, 
-    generate_payment_link, 
-    get_upsell_recommendations
+    check_order_status,
+    book_appointment,
+    escalate_to_human,
+    generate_payment_link,
+    get_upsell_recommendations,
+    search_knowledge_base,
+    lookup_customer,
 ]

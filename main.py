@@ -1,4 +1,13 @@
+import sys
 from contextlib import asynccontextmanager
+
+# Ensure UTF-8 console output so emoji in messages/logs don't crash on Windows (cp1252).
+for _stream in (sys.stdout, sys.stderr):
+    try:
+        _stream.reconfigure(encoding="utf-8")
+    except Exception:
+        pass
+
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 from app.api import webhook

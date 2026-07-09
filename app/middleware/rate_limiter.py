@@ -22,7 +22,17 @@ class RateLimiterMiddleware(BaseHTTPMiddleware):
         client_ip = request.client.host if request.client else "unknown"
         now = time.time()
 
-        # Clean old entries
+        # Opportunistically evict IPs whose entire window has expired, so the
+        # dict doesn't grow unbounded as new IPs arrive.
+        stale = [
+            ip for ip, times in self.requests.items()
+            if not times or now - times[-1] >= self.window_seconds
+        ]
+        for ip in stale:
+            if ip != client_ip:
+                del self.requests[ip]
+
+        # Clean old entries for the current client
         self.requests[client_ip] = [
             t for t in self.requests[client_ip]
             if now - t < self.window_seconds

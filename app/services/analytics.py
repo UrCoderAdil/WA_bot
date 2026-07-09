@@ -1,8 +1,8 @@
-import time
-from datetime import datetime, timedelta
+from datetime import timedelta
 from sqlalchemy import select, func, and_
 from app.models.analytics import AnalyticsEvent
 from app.db.database import async_session
+from app.core.utils import utcnow
 
 
 class AnalyticsService:
@@ -29,7 +29,7 @@ class AnalyticsService:
 
     async def get_summary(self, hours: int = 24) -> dict:
         """Get analytics summary for the last N hours."""
-        since = datetime.utcnow() - timedelta(hours=hours)
+        since = utcnow() - timedelta(hours=hours)
         async with async_session() as session:
             # Total messages
             total = await session.execute(
@@ -114,7 +114,7 @@ class AnalyticsService:
 
     async def get_hourly_volume(self, hours: int = 24) -> list[dict]:
         """Get message volume grouped by hour for charting."""
-        since = datetime.utcnow() - timedelta(hours=hours)
+        since = utcnow() - timedelta(hours=hours)
         async with async_session() as session:
             # Use date_trunc for PostgreSQL, strftime for SQLite
             try:

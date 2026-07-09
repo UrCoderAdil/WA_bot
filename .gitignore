@@ -1,0 +1,28 @@
+# Environment / secrets
+.env
+.env.*
+!.env.example
+
+# Python
+__pycache__/
+*.py[cod]
+*.egg-info/
+.venv/
+venv/
+env/
+
+# Local SQLite dev database
+*.db
+
+# Generated media (TTS output, downloads)
+media/
+
+# Node / Next.js frontend
+frontend/node_modules/
+frontend/.next/
+frontend/out/
+
+# Editor / OS
+.DS_Store
+.vscode/
+.idea/

@@ -13,6 +13,9 @@ class Settings(BaseSettings):
     # AI Config
     OPENAI_API_KEY: Optional[str] = None
     GEMINI_API_KEY: Optional[str] = None
+    # Model is configurable via .env. gemini-2.5-flash has a far more generous free-tier
+    # quota than gemini-3.5-flash (which is capped at ~20 requests/day on the free tier).
+    GEMINI_MODEL: str = "gemini-2.5-flash"
     
     # DB Config
     DATABASE_URL: Optional[str] = None

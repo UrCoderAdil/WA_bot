@@ -1,7 +1,7 @@
 import uuid
-from datetime import datetime
 from sqlalchemy import Column, String, Integer, DateTime, JSON, Text
 from app.db.database import Base
+from app.core.utils import utcnow
 
 
 class Customer(Base):
@@ -16,8 +16,8 @@ class Customer(Base):
     tags = Column(JSON, default=list)  # ["vip", "repeat_customer", "new"]
     notes = Column(Text, nullable=True)
     tenant_id = Column(String, nullable=True)  # Which business this customer belongs to
-    first_interaction = Column(DateTime, default=datetime.utcnow)
-    last_interaction = Column(DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
+    first_interaction = Column(DateTime, default=utcnow)
+    last_interaction = Column(DateTime, default=utcnow, onupdate=utcnow)
 
     def __repr__(self):
         return f"<Customer {self.phone_number} ({self.name})>"
