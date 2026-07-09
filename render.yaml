@@ -11,8 +11,11 @@ services:
         sync: false
       - key: FRONTEND_URL
         sync: false
-      - key: OPENAI_API_KEY
+      # Required: the LLM + knowledge base run on Gemini.
+      - key: GEMINI_API_KEY
         sync: false
+      - key: GEMINI_MODEL
+        value: "gemini-2.5-flash"
       - key: WHATSAPP_VERIFY_TOKEN
         sync: false
       - key: WHATSAPP_ACCESS_TOKEN
