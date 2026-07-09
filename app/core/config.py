@@ -20,6 +20,9 @@ class Settings(BaseSettings):
     # DB Config
     DATABASE_URL: Optional[str] = None
     REDIS_URL: Optional[str] = None
+    
+    # Frontend Deployment
+    FRONTEND_URL: str = "https://frontend-zeta-rust-52.vercel.app"
 
     # SLA & Rate Limiting
     RATE_LIMIT_PER_MINUTE: int = 60
